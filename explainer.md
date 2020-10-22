@@ -48,44 +48,74 @@ If multiple images are being tracked, results can be unpredictable if the images
 
 The `widthInMeters` attribute specifies the expected measured width of the image in the real world. This is required, but can be an estimate. If the actual size doesn't match the expected size, the initial reported pose when the image is first recognized is likely to be inaccurate, and may remain inaccurate if the system can't reliably detect its true 3D position. When viewed from a fixed camera position, a half-sized image at half the distance looks identical to a full-sized image, and the tracking system can't differentiate these cases without additional context about the environment.
 
+Once the session is active, the application can call `getTrackedImageScores()` on the XRSession. This returns a promise with information about the expected ability to use the provided images for tracking. The argument is an array containing one XRTrackedImageScore enum value per image, in the same order as the `trackedImages` array provided to `requestSession`. The enum value `untrackable` means that the image is not usable for tracking, for example due to having insufficient distinctive feature points, and this image will never appear in tracking results. Otherwise, the system can return a value of `low`, `medium`, or `high` to provide a quality estimate, or the single value `trackable` if it cannot provide a more specific estimate.
+
+```js
+async function onSessionStarted(session) {
+  const scores = await session.getTrackedImageScores();
+  let trackableImages = 0;
+  for (const index = 0; index < scores.length; ++index) {
+    if (scores[index] == 'untrackable') {
+      MarkImageUntrackable(index);
+    } else {
+      ++trackableImages;
+    }
+  }
+  if (trackableImages == 0) {
+    WarnUser("No trackable images");
+  }
+}
+```
+
 Once the session is active, in requestAnimationFrame, query XRFrame for the current state of tracked images:
 
 ```js
 const results = frame.getImageTrackingResults();
 for (const result of results) {
   // The result's index is the image's position in the trackedImages array specified at session creation
-  const image_index = result.index;
+  const imageIndex = result.index;
 
-  // Get the current pose if available.
   const pose = result.getPose(referenceSpace);
 
   if (state == "tracked") {
-    HighlightImage(image_index, pose);
+    HighlightImage(imageIndex, pose);
   } else if (state == "emulated") {
-    FadeImage(image_index, pose);
-  } else if (state == "lost") {
-    HideImage(image_index);
-  } else if (state == "untrackable") {
-    MarkImageUntrackable(image_index);
-    if (RemainingTrackableImageCount() == 0) {
-      WarnUser("No trackable images");
-    }
+    FadeImage(imageIndex, pose);
   }
 }
 ```
-
-The result list only contains entries for tracked images whose information has changed. The order of results is arbitrary, but each result's `index` attribute provides its location in the `trackedImages` array used with the initial session request.
 
 The `trackingState` attribute provides information about the tracked image:
 
 * `tracked` means the image was recognized and is currently being actively tracked in 3D space, and is at least partially visible to a tracking camera. (This does not necessarily mean that it's visible in the user's viewport in case that differs from the tracking camera field of view.)
 * `emulated` means that the image was recognized and tracked recently, but may currently be out of camera view or obscured, and the reported pose is based on assuming that the object remains at the same position and orientation as when it was last seen. This pose is likely to be adequate for a poster attached to a wall, but may be unhelpful for an image attached to a moving object.
-* `lost` means that the image is no longer being tracked, for example because its most recent known pose is too old and/or the current environment doesn't have sufficient reference points to calculate a location.
-* `untrackable` means that the source image is not trackable at all, for example because it had insufficient distinctive features to be recognized. This state is only reported once for affected images, typically shortly after session start, and the affected images won't ever appear in results for the remainder of the session.
 
 The pose position corresponds to the center point of the tracked image. The pose orientation has +x pointing toward the right edge of the image and +y toward the top of the image. The +z axis is orthogonal to the picture plane, pointing toward the viewer when the image is in front.
 
-The returned image tracking data also includes a `measuredWidthInMeters` value as measured by the tracking system. This is zero if this is unknown, for example due to the image not having been detected yet, then updated on a best-effort basis when the image is being actively tracked. If the tracking state is `tracked`, drawing a rectangle of this width at the provided pose in 3D space should ideally be a close match to the image as seen by the tracking camera. If the actual size differs from the initially specified size and hasn't been accurately measured yet, drawing this rectangle on a 2D screen should still visually appear at the expected screen position and size, but may be at the wrong depth, leading to incorrect occlusion compared to other scene objects.
+The returned image tracking data also includes a `measuredWidthInMeters` value as measured by the tracking system. This is zero if this is unknown, for example due to the image being detected but not yet firmly located in 3D space. The measurement is updated on a best-effort basis as the image is being tracked, but may remain zero if the implementation is unable to provide such a measurement. If the tracking state is `tracked`, drawing a rectangle of the measured width at the provided pose in 3D space should ideally be a close match to the image as seen by the tracking camera. If the actual size differs from the initially specified size and hasn't been accurately measured yet, drawing this rectangle on a 2D screen should still visually appear at the expected screen position and size, but may be at the wrong depth, leading to incorrect occlusion compared to other scene objects.
+
+The result list only contains entries for actively tracked images. The order of results is arbitrary, but each result's `index` attribute provides its location in the `trackedImages` array used with the initial session request.
+
+If tracking is lost, the image stops appearing in the results for future frames. If an application needs to take action on tracking loss, it can do so by saving information about the previous frame's tracked images, for example:
+
+```js
+let imagesTrackedPreviousFrame = {};
+
+function onAnimationLoop(frame) {
+  let imagesTrackedThisFrame = {};
+  for (const result of frame.getImageTrackingResults()) {
+    imagesTrackedThisFrame[result.index] = true;
+  }
+
+  for (const index in imagesTrackedPreviousFrame) {
+    if (!imagesTrackedThisFrame[index]) {
+      HideImage(index);
+    }
+  }
+  imagesTrackedPreviousFrame = imagesTrackedThisFrame;
+}
+```
+
 
 ## Appendix: Proposed Web IDL
 
@@ -100,19 +130,29 @@ dictionary XRTrackedImageInit {
   float widthInMeters;
 };
 
+enum XRImageTrackingScore {
+  "untrackable",
+  "trackable",
+  "low",
+  "medium",
+  "high"
+};
+
+partial interface XRSession {
+  FrozenArray<XRImageTrackingScore> getTrackedImageScores();
+};
+
 partial interface XRFrame {
   FrozenArray<XRImageTrackingResult> getImageTrackingResults();
 };
 
 enum XRImageTrackingState {
-  "untrackable",
   "tracked",
   "emulated",
-  "lost"
 };
 
 interface XRImageTrackingResult {
-  XRPose? getPose(XRSpace relativeTo);
+  XRPose getPose(XRSpace relativeTo);
 
   readonly attribute unsigned long index;
   readonly attribute XRImageTrackingState trackingState;
