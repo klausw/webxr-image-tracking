@@ -75,7 +75,8 @@ for (const result of results) {
   // The result's index is the image's position in the trackedImages array specified at session creation
   const imageIndex = result.index;
 
-  const pose = result.getPose(referenceSpace);
+  // Get the pose of the image relative to a reference space.
+  const pose = frame.getPose(result.imageSpace, referenceSpace);
 
   if (state == "tracked") {
     HighlightImage(imageIndex, pose);
@@ -90,9 +91,9 @@ The `trackingState` attribute provides information about the tracked image:
 * `tracked` means the image was recognized and is currently being actively tracked in 3D space, and is at least partially visible to a tracking camera. (This does not necessarily mean that it's visible in the user's viewport in case that differs from the tracking camera field of view.)
 * `emulated` means that the image was recognized and tracked recently, but may currently be out of camera view or obscured, and the reported pose is based on assuming that the object remains at the same position and orientation as when it was last seen. This pose is likely to be adequate for a poster attached to a wall, but may be unhelpful for an image attached to a moving object.
 
-The pose position corresponds to the center point of the tracked image. The pose orientation has +x pointing toward the right edge of the image and +y toward the top of the image. The +z axis is orthogonal to the picture plane, pointing toward the viewer when the image is in front.
+The `imageSpace` origin is the center point of the tracked image. The +x axis points toward the right edge of the image and +y toward the top of the image. The +z axis is orthogonal to the picture plane, pointing toward the viewer when the image's front is in view.
 
-The returned image tracking data also includes a `measuredWidthInMeters` value as measured by the tracking system. This is zero if this is unknown, for example due to the image being detected but not yet firmly located in 3D space. The measurement is updated on a best-effort basis as the image is being tracked, but may remain zero if the implementation is unable to provide such a measurement. If the tracking state is `tracked`, drawing a rectangle of the measured width at the provided pose in 3D space should ideally be a close match to the image as seen by the tracking camera. If the actual size differs from the initially specified size and hasn't been accurately measured yet, drawing this rectangle on a 2D screen should still visually appear at the expected screen position and size, but may be at the wrong depth, leading to incorrect occlusion compared to other scene objects.
+The returned image tracking data also includes a `measuredWidthInMeters` value as measured by the tracking system. This is zero if this is unknown, for example due to the image being detected but not yet firmly located in 3D space. The measurement is updated on a best-effort basis as the image is being tracked, but may remain zero if the implementation is unable to provide such a measurement. If the tracking state is `tracked`, drawing a rectangle of the measured width at the imageSpace's pose in 3D space should ideally be a close match to the image as seen by the tracking camera. If the actual size differs from the initially specified size and hasn't been accurately measured yet, drawing this rectangle on a 2D screen should still visually appear at the expected screen position and size, but may be at the wrong depth, leading to incorrect occlusion compared to other scene objects.
 
 The result list only contains entries for actively tracked images. The order of results is arbitrary, but each result's `index` attribute provides its location in the `trackedImages` array used with the initial session request.
 
@@ -152,8 +153,7 @@ enum XRImageTrackingState {
 };
 
 interface XRImageTrackingResult {
-  XRPose getPose(XRSpace relativeTo);
-
+  readonly attribute XRSpace imageSpace;
   readonly attribute unsigned long index;
   readonly attribute XRImageTrackingState trackingState;
   readonly attribute float measuredWidthInMeters;
