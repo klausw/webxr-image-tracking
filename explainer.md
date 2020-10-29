@@ -48,7 +48,7 @@ If multiple images are being tracked, results can be unpredictable if the images
 
 The `widthInMeters` attribute specifies the expected measured width of the image in the real world. This is required, but can be an estimate. If the actual size doesn't match the expected size, the initial reported pose when the image is first recognized is likely to be inaccurate, and may remain inaccurate if the system can't reliably detect its true 3D position. When viewed from a fixed camera position, a half-sized image at half the distance looks identical to a full-sized image, and the tracking system can't differentiate these cases without additional context about the environment.
 
-Once the session is active, the application can call `getTrackedImageScores()` on the XRSession. This returns a promise with information about the expected ability to use the provided images for tracking. The argument is an array containing one XRTrackedImageScore enum value per image, in the same order as the `trackedImages` array provided to `requestSession`. The enum value `untrackable` means that the image is not usable for tracking, for example due to having insufficient distinctive feature points, and this image will never appear in tracking results. Otherwise, the system can return a value of `low`, `medium`, or `high` to provide a quality estimate, or the single value `trackable` if it cannot provide a more specific estimate.
+Once the session is active, the application can call `getTrackedImageScores()` on the XRSession. This returns a promise with information about the expected ability to use the provided images for tracking. The argument is an array containing one XRTrackedImageScore enum value per image, in the same order as the `trackedImages` array provided to `requestSession`. The enum value `untrackable` means that the image is not usable for tracking, for example due to having insufficient distinctive feature points, and this image will never appear in tracking results. The value `trackable` means that the image is potentially detectable. (Future versions of this API may define additional more granular values with quality estimates for trackable images. A value other than `untrackable` should be considered to be a potentially trackable image.)
 
 ```js
 async function onSessionStarted(session) {
@@ -134,13 +134,10 @@ dictionary XRTrackedImageInit {
 enum XRImageTrackingScore {
   "untrackable",
   "trackable",
-  "low",
-  "medium",
-  "high"
 };
 
 partial interface XRSession {
-  FrozenArray<XRImageTrackingScore> getTrackedImageScores();
+  Promise<FrozenArray<XRImageTrackingScore>> getTrackedImageScores();
 };
 
 partial interface XRFrame {
@@ -153,7 +150,7 @@ enum XRImageTrackingState {
 };
 
 interface XRImageTrackingResult {
-  readonly attribute XRSpace imageSpace;
+  [SameObject] readonly attribute XRSpace imageSpace;
   readonly attribute unsigned long index;
   readonly attribute XRImageTrackingState trackingState;
   readonly attribute float measuredWidthInMeters;
