@@ -1,4 +1,8 @@
-# WebXR Image Tracking API - explainer
+# WebXR Image Tracking API - explainer DRAFT
+
+## DISCLAIMER
+
+**WARNING:** This is an early draft of a proposed API that's still under active discussion, see for example [immersive-web/administrivia#135](https://github.com/immersive-web/administrivia/issues/135). **DO NOT** quote this draft as a specification, and expect incompatible changes in the future.
 
 ## Introduction
 
